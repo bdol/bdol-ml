@@ -8,7 +8,7 @@ repository as clean as possible.
 Each directory contains an algorithm that only depends on other code or data
 present in this repository. Most of the code is written in Python and MATLAB,
 and specific dependencies for each project are noted. Each example will have an
-associated blog post on my personal website (
+associated blog post on my personal website (http://briandolhansky.com/).
 
 The following items will be added to this repository in the future:
 
