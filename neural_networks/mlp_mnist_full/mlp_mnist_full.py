@@ -17,18 +17,11 @@ def d_rectified_linear(X):
 
 def softmax(X):
   # Use the log-sum-exp trick for numerical stability
-  m = np.amax(X, axis=1)
-  m = np.reshape(m, (len(m), -1))
+  m = np.atleast_2d(np.amax(X, axis=1)).T
   y_exp = np.exp(X-m)
 
-  s = np.sum(y_exp, axis=1)
-  s = np.reshape(s, (len(s), -1))
-  #try:
-    #r = y_exp/s
-  #except FloatingPointError:
-    #print y_exp
-    #print "softmax err"
-    #sys.exit(1)
+  s = np.atleast_2d(np.sum(y_exp, axis=1)).T
+
   return y_exp/s
 
 def d_softmax(X):
@@ -55,7 +48,7 @@ class Layer:
     self.a = 0
 
   def compute_activation(self, X, doDropout=False, dropoutProb=0.5):
-    X_d = np.copy(X)
+    X_d = X
     # I think you should drop out columns here?
     if doDropout:
       X_d = X_d*np.random.binomial(1, (1-dropoutProb), X_d.shape)
@@ -72,7 +65,6 @@ class MLP:
     self.doDropout = doDropout
     self.dropoutProb = dropoutProb
     self.dropoutInputProb = dropoutInputProb
-    self.defcon5 = False
 
     # Activations map - we need this to map from the strings in the *.ini file
     # to actual function names
@@ -86,7 +78,6 @@ class MLP:
     # Initialize each layer with the given parameters
     self.layers = []
     self.currentGrad = []
-    self.previousGrad = []
     for i in range(0, len(layerSizes)-1):
       size = [layerSizes[i]+1, layerSizes[i+1]]
       activation = activationsMap[activations[i]]
@@ -95,7 +86,6 @@ class MLP:
       l = Layer(size, activation, d_activation)
       self.layers.append(l)
       self.currentGrad.append(np.zeros(size))
-      self.previousGrad.append(np.zeros(size))
 
   def forward_propagate(self, X):
     x_l = np.atleast_2d(X)
@@ -135,7 +125,7 @@ class MLP:
           self.layers[i].W[j,k] = W_initial[i][j,k]
 
           g_approx = (E_p-E_m)/(2*eps)
-          if abs(g_approx-W_grad[i][j,k])>1E-8:
+          if abs(g_approx-W_grad[i][j,k])>1E-4:
             print "Gradient checking failed for ",i,j,k,abs(g_approx-W_grad[i][j,k])
 
   def calculate_gradient(self, output, X, Y, eta, momentum):
@@ -158,16 +148,6 @@ class MLP:
         W = self.layers[i+1].W[0:-1, :]
         deltas[i] = D.dot(W.dot(deltas[i+1]))
 
-        # Add the gradient for this example
-        #z_i = 0
-        ## Gradient at the input layer
-        #if i==0:
-          #z_i = X[j, :]
-        #else:
-          #z_i = self.layers[i-1].z[j, :]
-        #z_i = np.append(z_i, [1])
-        #W_grad[i] += np.outer(z_i, deltas[i])
-
       for i in range(0, len(self.layers)):
         z_i = 0
         # Gradient at the input layer
@@ -178,17 +158,6 @@ class MLP:
         z_i = np.append(z_i, [1])
         W_grad[i] += np.outer(z_i, deltas[i])
 
-      if self.defcon5 and j==4:
-        for i in range(0, len(self.layers)):
-          np.savetxt("Wdfc_"+str(i), self.layers[i].W)
-          np.savetxt("Ddfc_"+str(i), self.layers[i].d)
-          np.savetxt("delta_"+str(i), deltas[i])
-        np.savetxt("XXdfc", X)
-        np.savetxt("YYdfc", Y)
-        np.savetxt("outputdfc", output)
-        np.savetxt("e", e)
-        self.defcon5=False
-
     return W_grad
 
   def backpropagate(self, output, X, Y, eta, momentum):
@@ -196,17 +165,15 @@ class MLP:
 
     # Update the current gradient, and step in that direction
     for i in range(0, len(self.layers)):
-      self.currentGrad[i] = momentum*self.previousGrad[i] - (1.0-momentum)*eta*W_grad[i]
+      self.currentGrad[i] = momentum*self.currentGrad[i] - (1.0-momentum)*eta*W_grad[i]
       self.layers[i].W += self.currentGrad[i]
-      self.previousGrad[i] = np.copy(self.currentGrad[i])
+      #self.previousGrad[i] = np.copy(self.currentGrad[i])
 
       # Constrain the weights going to the hidden units if necessary
-      #if i<len(self.layers)-1:
       wLens = np.linalg.norm(self.layers[i].W, axis=0)**2
       wLenCorrections = np.ones([1, self.layers[i].W.shape[1]])
       wLenCorrections[0, np.where(wLens>wLenLimit)[0]] = wLens[wLens>wLenLimit]/wLenLimit
       self.layers[i].W = self.layers[i].W/(np.sqrt(wLenCorrections))
-
 
   # Propagate forward through the network, record the training error, train the
   # weights with backpropagation
@@ -290,7 +257,7 @@ if __name__ == "__main__":
           learningRate, p)
 
 
-      if i%minibatchSize==0:
+      if i%(10*minibatchSize)==0:
         bdp.progBar(i, X_tr.shape[0])
     bdp.progBar(X_tr.shape[0], X_tr.shape[0])
 
@@ -330,16 +297,5 @@ if __name__ == "__main__":
     if logToFile:
       f.write(logStr)
 
-    #if numErrsTest > 1000:
-      #for i in range(0, len(mlp.layers)):
-        #np.savetxt("W_"+str(i), mlp.layers[i].W)
-      #np.savetxt("XX", X_te[0:100, :])
-      #np.savetxt("YY", Y_te[0:100, :])
-      #print "Coadaptation detected..."
-      #mlp.defcon5 = True
-      ##if logToFile:
-        ##f.close()
-      
-    
   if logToFile:
     f.close()
