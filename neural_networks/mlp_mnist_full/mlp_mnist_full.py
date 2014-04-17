@@ -144,9 +144,10 @@ class MLP:
       deltas[-1] = e[j, :].T
       # Backpropagation to determine the deltas at each layer
       for i in range(len(self.layers)-2, -1, -1):
-        D = np.diag(self.layers[i].d[j, :])
+        #D = np.diag(self.layers[i].d[j, :])
         W = self.layers[i+1].W[0:-1, :]
-        deltas[i] = D.dot(W.dot(deltas[i+1]))
+        deltas[i] = np.multiply(self.layers[i].d[j, :], W.dot(deltas[i+1]))
+        #deltas[i] = D.dot(W.dot(deltas[i+1]))
 
       for i in range(0, len(self.layers)):
         z_i = 0
@@ -155,8 +156,8 @@ class MLP:
           z_i = X[j, :]
         else:
           z_i = self.layers[i-1].z[j, :]
-        z_i = np.append(z_i, [1])
-        W_grad[i] += np.outer(z_i, deltas[i])
+        z_i = np.ascontiguousarray(np.atleast_2d(np.append(z_i, [1])))
+        W_grad[i] += (z_i.T).dot(np.atleast_2d(deltas[i]))
 
     return W_grad
 
@@ -245,7 +246,7 @@ if __name__ == "__main__":
   if checkGradient:
     print "Checking gradient..."
     mlp.check_gradient(X_tr[0:10, :], Y_tr[0:10, :], learningRate, 0)
-    print "Gradient is correct!"
+    print "Gradient checking complete."
 
   print "Training for "+str(numEpochs)+" epochs:"
   p = momentumInitial
@@ -275,12 +276,12 @@ if __name__ == "__main__":
 
     # Calculate errors
     YhatTrain = mlp.test(X_tr)
-    np.savetxt('mnistyhat.txt', YhatTrain)
-    np.savetxt('mnisty.txt', Y_tr)
-    rmseErrorTrain = RMSE(Y_tr, YhatTrain)
+    rmseErrorTrain = 0
+    #rmseErrorTrain = RMSE(Y_tr, YhatTrain)
     numErrsTrain = numErrs(Y_tr, YhatTrain)
     YhatTest = mlp.test(X_te)
-    rmseErrorTest = RMSE(Y_te, YhatTest)
+    rmseErrorTest = 0
+    #rmseErrorTest = RMSE(Y_te, YhatTest)
     numErrsTest = numErrs(Y_te, YhatTest)
 
     errsStr = "Train RMSE: {0}\tTrain errors: {1}\n".format(rmseErrorTrain,
