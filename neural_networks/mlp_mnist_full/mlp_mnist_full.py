@@ -36,16 +36,7 @@ def d_softmax(X):
   return X
 
 def sigmoid(X):
-  r = 0
-  try:
-    r = 1/(1+np.exp(-X))
-  except FloatingPointError:
-    print "xerr"
-    print X
-    print "Sigmoid error"
-    sys.exit(1)
-
-  return r
+  return 1.0/(1+np.exp(-X))
 
 def d_sigmoid(X):
   return sigmoid(X)*(1-sigmoid(X))
@@ -64,7 +55,7 @@ class Layer:
     self.a = 0
 
   def compute_activation(self, X, doDropout=False, dropoutProb=0.5):
-    X_d = X
+    X_d = np.copy(X)
     # I think you should drop out columns here?
     if doDropout:
       X_d = X_d*np.random.binomial(1, (1-dropoutProb), X_d.shape)
@@ -81,6 +72,7 @@ class MLP:
     self.doDropout = doDropout
     self.dropoutProb = dropoutProb
     self.dropoutInputProb = dropoutInputProb
+    self.defcon5 = False
 
     # Activations map - we need this to map from the strings in the *.ini file
     # to actual function names
@@ -99,8 +91,6 @@ class MLP:
       size = [layerSizes[i]+1, layerSizes[i+1]]
       activation = activationsMap[activations[i]]
       d_activation = d_activationsMap[activations[i]]
-      print "Layer {0}, activation {1}, d_activation {2}, size {3}".format(i,
-          activation, d_activation, size)
 
       l = Layer(size, activation, d_activation)
       self.layers.append(l)
@@ -126,7 +116,6 @@ class MLP:
     eps = 1E-4
     output = self.forward_propagate(X)
     W_grad = self.calculate_gradient(output, X, Y, eta, momentum)
-    zzz = self.layers[0].z[0, 0]
     
     W_initial = []
     for i in range(0, len(self.layers)):
@@ -146,7 +135,7 @@ class MLP:
           self.layers[i].W[j,k] = W_initial[i][j,k]
 
           g_approx = (E_p-E_m)/(2*eps)
-          if abs(g_approx-W_grad[i][j,k])>1E-4:
+          if abs(g_approx-W_grad[i][j,k])>1E-8:
             print "Gradient checking failed for ",i,j,k,abs(g_approx-W_grad[i][j,k])
 
   def calculate_gradient(self, output, X, Y, eta, momentum):
@@ -169,7 +158,16 @@ class MLP:
         W = self.layers[i+1].W[0:-1, :]
         deltas[i] = D.dot(W.dot(deltas[i+1]))
 
-      # Add the gradient for this example
+        # Add the gradient for this example
+        #z_i = 0
+        ## Gradient at the input layer
+        #if i==0:
+          #z_i = X[j, :]
+        #else:
+          #z_i = self.layers[i-1].z[j, :]
+        #z_i = np.append(z_i, [1])
+        #W_grad[i] += np.outer(z_i, deltas[i])
+
       for i in range(0, len(self.layers)):
         z_i = 0
         # Gradient at the input layer
@@ -180,20 +178,35 @@ class MLP:
         z_i = np.append(z_i, [1])
         W_grad[i] += np.outer(z_i, deltas[i])
 
+      if self.defcon5 and j==4:
+        for i in range(0, len(self.layers)):
+          np.savetxt("Wdfc_"+str(i), self.layers[i].W)
+          np.savetxt("Ddfc_"+str(i), self.layers[i].d)
+          np.savetxt("delta_"+str(i), deltas[i])
+        np.savetxt("XXdfc", X)
+        np.savetxt("YYdfc", Y)
+        np.savetxt("outputdfc", output)
+        np.savetxt("e", e)
+        sys.exit(0)
+
     return W_grad
 
   def backpropagate(self, output, X, Y, eta, momentum):
     W_grad = self.calculate_gradient(output, X, Y, eta, momentum)
 
-    # Take a step in the direction of the gradient
+    # Update the current gradient, and step in that direction
     for i in range(0, len(self.layers)):
-      self.layers[i].W -= 0.002*W_grad[i]
+      self.currentGrad[i] = momentum*self.previousGrad[i] - (1.0-momentum)*eta*W_grad[i]
+      self.layers[i].W += self.currentGrad[i]
+      self.previousGrad[i] = np.copy(self.currentGrad[i])
+
       # Constrain the weights going to the hidden units if necessary
-      if i<len(self.layers)-1:
-        wLens = np.linalg.norm(self.layers[i].W, axis=0)**2
-        wLenCorrections = np.ones([1, self.layers[i].W.shape[1]])
-        wLenCorrections[0, np.where(wLens>wLenLimit)[0]] = wLens[wLens>wLenLimit]/wLenLimit
-        self.layers[i].W = self.layers[i].W/(np.sqrt(wLenCorrections))
+      #if i<len(self.layers)-1:
+      wLens = np.linalg.norm(self.layers[i].W, axis=0)**2
+      wLenCorrections = np.ones([1, self.layers[i].W.shape[1]])
+      wLenCorrections[0, np.where(wLens>wLenLimit)[0]] = wLens[wLens>wLenLimit]/wLenLimit
+      self.layers[i].W = self.layers[i].W/(np.sqrt(wLenCorrections))
+
 
   # Propagate forward through the network, record the training error, train the
   # weights with backpropagation
@@ -259,7 +272,7 @@ if __name__ == "__main__":
     f.write('RMSE Train,Num. Errors Train,RMSE Valid.,Num. Errors Valid,RMSE Test,Num. Errors Test,learningRate,momentum,elapsedTime\n')
 
   # Load the corresponding data
-  X_tr, Y_tr, X_v, Y_v, X_te, Y_te = bdp.loadMNIST(mnistPath, digits=digits,
+  X_tr, Y_tr, X_te, Y_te = bdp.loadMNISTnp(mnistPath, digits=digits,
       asBitVector=True)
 
   if checkGradient:
@@ -272,55 +285,61 @@ if __name__ == "__main__":
   for t in range(0, numEpochs):
     startTime = time.time()
 
-    if t< momentumT:
-      p = 1/momentumT*momentumInitial + (1-1/momentumT)*momentumFinal
-    else:
-      p = momentumFinal
-
     for i in range(0, X_tr.shape[0], minibatchSize):
       mlp.train(X_tr[i:i+minibatchSize, :], Y_tr[i:i+minibatchSize],
           learningRate, p)
 
-      if i%100==0:
+
+      if i%minibatchSize==0:
         bdp.progBar(i, X_tr.shape[0])
     bdp.progBar(X_tr.shape[0], X_tr.shape[0])
-    elapsedTime = (time.time()-startTime)
-    print " Epoch {0}, learning rate: {1:.4f}, elapsed time: {2:.2f}s".format(t, learningRate, elapsedTime)
 
+    elapsedTime = (time.time()-startTime)
+    print " Epoch {0}, learning rate: {1:.4f}, momentum: {2:.4f} elapsed time: {3:.2f}s".format(t, learningRate, p, elapsedTime)
+
+    # Decay the learning rate
     learningRate = learningRate*rateDecay
 
-    # Calculate training error
+    # Update the momentum
+    if t < momentumT:
+      p = (1.0-float(t)/momentumT)*momentumInitial + (float(t)/momentumT)*momentumFinal
+    else:
+      p = momentumFinal
+
+    # Calculate errors
     YhatTrain = mlp.test(X_tr)
     np.savetxt('mnistyhat.txt', YhatTrain)
     np.savetxt('mnisty.txt', Y_tr)
     rmseErrorTrain = RMSE(Y_tr, YhatTrain)
     numErrsTrain = numErrs(Y_tr, YhatTrain)
-    YhatValid = mlp.test(X_v)
-    rmseErrorValid = RMSE(Y_v, YhatValid)
-    numErrsValid = numErrs(Y_v, YhatValid)
     YhatTest = mlp.test(X_te)
     rmseErrorTest = RMSE(Y_te, YhatTest)
     numErrsTest = numErrs(Y_te, YhatTest)
 
-    np.savetxt('mnistyhat.txt', YhatTrain)
-    np.savetxt('mnisty.txt', Y_tr)
-
     errsStr = "Train RMSE: {0}\tTrain errors: {1}\n".format(rmseErrorTrain,
         numErrsTrain)
-    errsStr += "Valid. RMSE: {0}\tValid. errors: {1}\n".format(rmseErrorValid,
-        numErrsValid)
     errsStr += "Test RMSE: {0}\tTest errors: {1}\n".format(rmseErrorTest,
         numErrsTest)
     print errsStr
 
-    logStr = "{0},{1},{2},{3},{4},{5},{6},{7},{8:.2f}\n".format(
+    logStr = "{0},{1},{2},{3},{4},{5},{6:.2f}\n".format(
                 rmseErrorTrain, numErrsTrain,
-                rmseErrorValid, numErrsValid,
                 rmseErrorTest, numErrsTest,
                 learningRate, p,
                 elapsedTime)
     if logToFile:
       f.write(logStr)
+
+    if numErrsTest > 1000:
+      for i in range(0, len(mlp.layers)):
+        np.savetxt("W_"+str(i), mlp.layers[i].W)
+      np.savetxt("XX", X_te[0:100, :])
+      np.savetxt("YY", Y_te[0:100, :])
+      print "Coadaptation detected..."
+      mlp.defcon5 = True
+      #if logToFile:
+        #f.close()
+      
     
   if logToFile:
     f.close()
