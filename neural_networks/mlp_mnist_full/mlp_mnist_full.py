@@ -187,7 +187,7 @@ class MLP:
 
     # Take a step in the direction of the gradient
     for i in range(0, len(self.layers)):
-      self.layers[i].W -= eta*W_grad[i]
+      self.layers[i].W -= 0.002*W_grad[i]
       # Constrain the weights going to the hidden units if necessary
       if i<len(self.layers)-1:
         wLens = np.linalg.norm(self.layers[i].W, axis=0)**2
@@ -245,10 +245,8 @@ if __name__ == "__main__":
   minibatchSize = ast.literal_eval(cfg.get('experiment', 'minibatchSize'))
   learningRate = ast.literal_eval(cfg.get('experiment', 'learningRate'))
   rateDecay = ast.literal_eval(cfg.get('experiment', 'rateDecay'))
-  checkGradient = ast.literal_eval(cfg.get('experiment', 'rateDecay'))
+  checkGradient = ast.literal_eval(cfg.get('experiment', 'checkGradient'))
   np.random.seed(1234)
-  np.seterr(all='raise')
-  np.seterr(under='ignore')
 
   # Set up the program options
   debugMode = ast.literal_eval(cfg.get('program', 'debugMode'))
@@ -293,6 +291,8 @@ if __name__ == "__main__":
 
     # Calculate training error
     YhatTrain = mlp.test(X_tr)
+    np.savetxt('mnistyhat.txt', YhatTrain)
+    np.savetxt('mnisty.txt', Y_tr)
     rmseErrorTrain = RMSE(Y_tr, YhatTrain)
     numErrsTrain = numErrs(Y_tr, YhatTrain)
     YhatValid = mlp.test(X_v)
