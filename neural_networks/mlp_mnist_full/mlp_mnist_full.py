@@ -187,7 +187,7 @@ class MLP:
         np.savetxt("YYdfc", Y)
         np.savetxt("outputdfc", output)
         np.savetxt("e", e)
-        sys.exit(0)
+        self.defcon5=False
 
     return W_grad
 
@@ -330,15 +330,15 @@ if __name__ == "__main__":
     if logToFile:
       f.write(logStr)
 
-    if numErrsTest > 1000:
-      for i in range(0, len(mlp.layers)):
-        np.savetxt("W_"+str(i), mlp.layers[i].W)
-      np.savetxt("XX", X_te[0:100, :])
-      np.savetxt("YY", Y_te[0:100, :])
-      print "Coadaptation detected..."
-      mlp.defcon5 = True
-      #if logToFile:
-        #f.close()
+    #if numErrsTest > 1000:
+      #for i in range(0, len(mlp.layers)):
+        #np.savetxt("W_"+str(i), mlp.layers[i].W)
+      #np.savetxt("XX", X_te[0:100, :])
+      #np.savetxt("YY", Y_te[0:100, :])
+      #print "Coadaptation detected..."
+      #mlp.defcon5 = True
+      ##if logToFile:
+        ##f.close()
       
     
   if logToFile:
