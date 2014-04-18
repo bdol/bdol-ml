@@ -49,14 +49,22 @@ class Layer:
     self.d = np.zeros((size[0], size[1]))
     self.a = 0
 
-  def compute_activation(self, X, doDropout=False, dropoutProb=0.5):
+  def compute_activation(self, X, doDropout=False, dropoutProb=0.5,
+      testing=False):
     X_d = X
     # I think you should drop out columns here?
     if doDropout:
-      X_d[:, 0:-1] = X_d[:, 0:-1]*np.random.binomial(1, (1-dropoutProb),
-          (X_d.shape[0], X_d.shape[1]-1))
+      # We are not testing, so do dropout
+      if not testing:
+        X_d[:, 0:-1] = X_d[:, 0:-1]*np.random.binomial(1, (1-dropoutProb),
+            (X_d.shape[0], X_d.shape[1]-1))
+        self.a = X_d.dot(self.W)
+      # We are testing, so we don't do dropout but we do scale the weights
+      if testing:
+        self.a = X_d.dot(self.W*(1-dropoutProb))
+    else:
+      self.a = X_d.dot(self.W)
 
-    self.a = X_d.dot(self.W)
     self.z = self.activation(self.a)
     self.d = self.d_activation(self.a)
 
@@ -90,14 +98,16 @@ class MLP:
       self.layers.append(l)
       self.currentGrad.append(np.zeros(size))
 
-  def forward_propagate(self, X):
+  def forward_propagate(self, X, testing=False):
     x_l = np.atleast_2d(X)
     for i in range(0, len(self.layers)):
       x_l = np.append(x_l, np.ones((x_l.shape[0], 1)), 1)
       if i==0: # We're at the input layer
-        x_l = self.layers[i].compute_activation(x_l, doDropout, dropoutInputProb)
+        x_l = self.layers[i].compute_activation(x_l, doDropout,
+            dropoutInputProb, testing)
       else:
-        x_l = self.layers[i].compute_activation(x_l, doDropout, dropoutProb)
+        x_l = self.layers[i].compute_activation(x_l, doDropout, dropoutProb,
+            testing)
 
     return x_l
 
@@ -176,14 +186,14 @@ class MLP:
   # Propagate forward through the network, record the training error, train the
   # weights with backpropagation
   def train(self, X, Y, eta, momentum):
-    output = self.forward_propagate(X)
+    output = self.forward_propagate(X, testing=False)
     self.backpropagate(output, X, Y, eta, momentum)
 
   # Just pass the data forward through the network and return the predictions
   # for the given miniBatch
   def test(self, X):
     Yhat = np.zeros((X.shape[0], self.layers[-1].W.shape[1]))
-    Yhat = self.forward_propagate(X)
+    Yhat = self.forward_propagate(X, testing=True)
     return Yhat
 
 def RMSE(Y, Yhat):
@@ -201,7 +211,7 @@ def numErrs(Y, Yhat):
 if __name__ == "__main__":
   # Load the parameters for this network from the initialization file
   cfg = ConfigParser.ConfigParser()
-  cfg.read("params.ini")
+  cfg.read(sys.argv[1])
 
   layerSizes = list(ast.literal_eval(cfg.get('net', 'layerSizes')))
   activations = cfg.get('net', 'activations').split(',')
@@ -248,7 +258,7 @@ if __name__ == "__main__":
     f.write('Num. Errors Train,Num. Errors Test,learningRate,momentum,elapsedTime\n')
     # Also copy the params over for posterity
     paramsCopyStr = logFileBaseName+"_params_"+str(uuidStr)+".ini"
-    shutil.copyfile("params.ini", paramsCopyStr)
+    shutil.copyfile(sys.argv[1], paramsCopyStr)
 
   # Load the corresponding data
   X_tr, Y_tr, X_te, Y_te = bdp.loadMNISTnp(mnistPath, digits=digits,
