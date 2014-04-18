@@ -53,7 +53,8 @@ class Layer:
     X_d = X
     # I think you should drop out columns here?
     if doDropout:
-      X_d = X_d*np.random.binomial(1, (1-dropoutProb), X_d.shape)
+      X_d[:, 0:-1] = X_d[:, 0:-1]*np.random.binomial(1, (1-dropoutProb),
+          (X_d.shape[0], X_d.shape[1]-1))
 
     self.a = X_d.dot(self.W)
     self.z = self.activation(self.a)
@@ -93,7 +94,10 @@ class MLP:
     x_l = np.atleast_2d(X)
     for i in range(0, len(self.layers)):
       x_l = np.append(x_l, np.ones((x_l.shape[0], 1)), 1)
-      x_l = self.layers[i].compute_activation(x_l)
+      if i==0: # We're at the input layer
+        x_l = self.layers[i].compute_activation(x_l, doDropout, dropoutInputProb)
+      else:
+        x_l = self.layers[i].compute_activation(x_l, doDropout, dropoutProb)
 
     return x_l
 
@@ -133,33 +137,24 @@ class MLP:
   def calculate_gradient(self, output, X, Y, eta, momentum):
     # First set up the gradients
     W_grad = []
-    deltas = []
     for i in range(0, len(self.layers)):
       W_grad.append( np.zeros(self.layers[i].W.shape) )
-      deltas.append( np.zeros((self.layers[i].W.shape[1], 1)))
 
     e = output-Y
 
     # Backpropagate for each training example separately
-    for j in range(0, Y.shape[0]):
-      # Delta at the output layer
-      deltas[-1] = e[j, :].T
-      # Backpropagation to determine the deltas at each layer
-      for i in range(len(self.layers)-2, -1, -1):
-        #D = np.diag(self.layers[i].d[j, :])
-        W = self.layers[i+1].W[0:-1, :]
-        deltas[i] = np.multiply(self.layers[i].d[j, :], W.dot(deltas[i+1]))
-        #deltas[i] = D.dot(W.dot(deltas[i+1]))
+    deltas = [e.T]
+    for i in range(len(self.layers)-2, -1, -1):
+      W = self.layers[i+1].W[0:-1, :]
+      deltas.insert(0, np.multiply(self.layers[i].d.T, W.dot(deltas[0])))
 
-      for i in range(0, len(self.layers)):
-        z_i = 0
-        # Gradient at the input layer
-        if i==0:
-          z_i = X[j, :]
-        else:
-          z_i = self.layers[i-1].z[j, :]
-        z_i = np.ascontiguousarray(np.atleast_2d(np.append(z_i, [1])))
-        W_grad[i] += (z_i.T).dot(np.atleast_2d(deltas[i]))
+    for i in range(0, len(self.layers)):
+      if i==0:
+        z_i = X
+      else:
+        z_i = self.layers[i-1].z
+      z_i = np.append(z_i, np.ones((z_i.shape[0], 1)), 1)
+      W_grad[i] = (deltas[i].dot(z_i)).T
 
     return W_grad
 
@@ -217,6 +212,10 @@ if __name__ == "__main__":
   momentumInitial = ast.literal_eval(cfg.get('net', 'momentumInitial'))
   momentumFinal = ast.literal_eval(cfg.get('net', 'momentumFinal'))
   momentumT = ast.literal_eval(cfg.get('net', 'momentumT'))
+  #cfg.set('net', 'momentumT', 'fuck')
+  #with open('params_test.ini', 'wb') as newconfig:
+    #cfg.write(newconfig)
+  #sys.exit(0)
 
   mlp = MLP(layerSizes, activations, doDropout, dropoutProb, dropoutInputProb,
       wLenLimit)
@@ -250,7 +249,6 @@ if __name__ == "__main__":
     # Also copy the params over for posterity
     paramsCopyStr = logFileBaseName+"_params_"+str(uuidStr)+".ini"
     shutil.copyfile("params.ini", paramsCopyStr)
-
 
   # Load the corresponding data
   X_tr, Y_tr, X_te, Y_te = bdp.loadMNISTnp(mnistPath, digits=digits,
