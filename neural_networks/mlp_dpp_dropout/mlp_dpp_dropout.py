@@ -1,6 +1,7 @@
 import ConfigParser
 import ast
 import bdolpyutils as bdp
+import dpp
 import numpy as np
 import shutil
 import sys
@@ -12,6 +13,7 @@ def rectified_linear(X):
   Xprime = np.array(X)
   Xprime[leqZeroIdx] = 0
   return Xprime
+  #return np.maximum(X, 0)
 
 def d_rectified_linear(X):
   gZeroIdx = X>0
@@ -39,31 +41,60 @@ def d_sigmoid(X):
 def linear(X):
   return X
 
+
 class Layer:
   def __init__(self, size, activation, d_activation):
     # TODO: make 0.01 a sigma parameter
     self.W = 0.01*np.random.randn(size[0], size[1])
+    self.prev_Z = None
     self.activation = activation
     self.d_activation = d_activation
     self.z = np.zeros((size[0], size[1]))
     self.d = np.zeros((size[0], size[1]))
     self.a = 0
 
+  def random_dropout(self, dropoutProb):
+    self.prevZ[:, 0:-1] = self.prevZ[:, 0:-1]*np.random.binomial(1, (1-dropoutProb),
+        (self.prevZ.shape[0], self.prevZ.shape[1]-1))
+
+  def dpp_dropout(self, X, dropoutProb):
+    if dropoutProb == 0:
+      return X.dot(self.W)
+
+    W_n = self.W[0:-1, :]/np.linalg.norm(self.W[0:-1, :], axis=0)
+    L = (W_n.dot(W_n.T))**2
+    D, V = np.linalg.eig(L)
+    D = np.real(D[::-1])
+    V = np.real(np.fliplr(V))
+    
+    k = int(np.floor((1-dropoutProb)*self.W.shape[0]))
+    J = dpp.sample_k(k, D, V)
+    d_idx = np.zeros((self.W.shape[0]-1, 1))
+    d_idx[J.astype(int)] = 1
+  
+    # TODO: this copy here might not be needed
+    X_d = np.copy(X)
+    X_d[:, 0:-1] = X_d[:, 0:-1]*d_idx.T
+    
+
+    return X_d.dot(self.W)
+
   def compute_activation(self, X, doDropout=False, dropoutProb=0.5,
       testing=False):
-    X_d = X
+    self.prevZ = np.copy(X)
     # I think you should drop out columns here?
     if doDropout:
       # We are not testing, so do dropout
       if not testing:
-        X_d[:, 0:-1] = X_d[:, 0:-1]*np.random.binomial(1, (1-dropoutProb),
-            (X_d.shape[0], X_d.shape[1]-1))
-        self.a = X_d.dot(self.W)
+        self.random_dropout(dropoutProb)
+        self.a = self.prevZ.dot(self.W)
+
       # We are testing, so we don't do dropout but we do scale the weights
       if testing:
-        self.a = X_d.dot(self.W*(1-dropoutProb))
+        self.a = self.prevZ[:, 0:-1].dot(self.W[0:-1, :]*(1-dropoutProb))
+        self.a += np.outer(self.prevZ[:, -1], self.W[-1, :])
     else:
-      self.a = X_d.dot(self.W)
+      self.a = self.prevZ.dot(self.W)
 
     self.z = self.activation(self.a)
     self.d = self.d_activation(self.a)
@@ -129,6 +160,7 @@ class MLP:
 
     for i in range(0, len(self.layers)):
       W = self.layers[i].W
+      print "Checking layer",i
       for j in range(0, W.shape[0]):
         for k in range(0, W.shape[1]):
           self.layers[i].W[j,k] += eps
@@ -143,6 +175,8 @@ class MLP:
           g_approx = (E_p-E_m)/(2*eps)
           if abs(g_approx-W_grad[i][j,k])>1E-4:
             print "Gradient checking failed for ",i,j,k,abs(g_approx-W_grad[i][j,k])
+
+        bdp.progBar(j, self.layers[i].W.shape[0])
 
   def calculate_gradient(self, output, X, Y, eta, momentum):
     # First set up the gradients
@@ -159,12 +193,7 @@ class MLP:
       deltas.insert(0, np.multiply(self.layers[i].d.T, W.dot(deltas[0])))
 
     for i in range(0, len(self.layers)):
-      if i==0:
-        z_i = X
-      else:
-        z_i = self.layers[i-1].z
-      z_i = np.append(z_i, np.ones((z_i.shape[0], 1)), 1)
-      W_grad[i] = (deltas[i].dot(z_i)).T
+      W_grad[i] = (deltas[i].dot(self.layers[i].prevZ)).T
 
     return W_grad
 
@@ -222,10 +251,6 @@ if __name__ == "__main__":
   momentumInitial = ast.literal_eval(cfg.get('net', 'momentumInitial'))
   momentumFinal = ast.literal_eval(cfg.get('net', 'momentumFinal'))
   momentumT = ast.literal_eval(cfg.get('net', 'momentumT'))
-  #cfg.set('net', 'momentumT', 'fuck')
-  #with open('params_test.ini', 'wb') as newconfig:
-    #cfg.write(newconfig)
-  #sys.exit(0)
 
   mlp = MLP(layerSizes, activations, doDropout, dropoutProb, dropoutInputProb,
       wLenLimit)
@@ -239,6 +264,7 @@ if __name__ == "__main__":
   rateDecay = ast.literal_eval(cfg.get('experiment', 'rateDecay'))
   checkGradient = ast.literal_eval(cfg.get('experiment', 'checkGradient'))
   np.random.seed(1234)
+
   # This option will continue the experiment for a certain number of epochs
   # after we have gotten 0 training errors
   numEpochsAfterOverfit = ast.literal_eval(cfg.get('experiment',
@@ -264,14 +290,15 @@ if __name__ == "__main__":
   X_tr, Y_tr, X_te, Y_te = bdp.loadMNISTnp(mnistPath, digits=digits,
       asBitVector=True)
 
-  if checkGradient:
-    print "Checking gradient..."
-    mlp.check_gradient(X_tr[0:10, :], Y_tr[0:10, :], learningRate, 0)
-    print "Gradient checking complete."
-
   print "Training for "+str(numEpochs)+" epochs:"
   p = momentumInitial
   for t in range(0, numEpochs):
+    if t == 5:
+      if checkGradient:
+        print "Checking gradient..."
+        mlp.check_gradient(X_tr[0:10, :], Y_tr[0:10, :], learningRate, 0)
+        print "Gradient checking complete."
+
     startTime = time.time()
 
     for i in range(0, X_tr.shape[0], minibatchSize):
@@ -309,6 +336,7 @@ if __name__ == "__main__":
                 numErrsTrain, numErrsTest, learningRate, p, elapsedTime)
     if logToFile:
       f.write(logStr)
+      f.flush()
 
     if numErrsTrain == 0 and numEpochsAfterOverfit > 0:
       print "No training errors. Continuing for {0} more epochs.".format(numEpochsRemaining) 
