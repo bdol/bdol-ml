@@ -57,11 +57,28 @@ class Layer:
     self.prevZ[:, 0:-1] = self.prevZ[:, 0:-1]*np.random.binomial(1, (1-dropoutProb),
         (self.prevZ.shape[0], self.prevZ.shape[1]-1))
 
-  def dpp_dropout(self, X, dropoutProb):
+  # Just an idea, doesn't really work. Need to come up with an approx. to DPP
+  # sampling
+  def orthogonal_dropout(self, dropoutProb):
     if dropoutProb == 0:
-      return X.dot(self.W)
+      return
 
     W_n = self.W[0:-1, :]/np.linalg.norm(self.W[0:-1, :], axis=0)
+    L = (W_n.dot(W_n.T))**2
+    # Sample dropoutProb/2 random vectors
+    initialIdx = np.random.choice(W_n.shape[0], dropoutProb/2*W_n.shape[0])
+    initialIdx = np.unique(np.append(initialIdx, np.argmin(L[initialIdx, :], axis=1)))
+    d_idx = np.ones((self.W.shape[0]-1, 1))
+    d_idx[initialIdx.astype(int)] = 0
+    self.prevZ[:, 0:-1] = self.prevZ[:, 0:-1]*d_idx.T
+
+
+  def dpp_dropout(self, dropoutProb):
+    if dropoutProb == 0:
+      return
+
+    W_n = self.W[0:-1, :]/np.linalg.norm(self.W[0:-1, :], axis=0)
+    np.savetxt("W_n", W_n)
     L = (W_n.dot(W_n.T))**2
     D, V = np.linalg.eig(L)
     D = np.real(D[::-1])
@@ -72,12 +89,7 @@ class Layer:
     d_idx = np.zeros((self.W.shape[0]-1, 1))
     d_idx[J.astype(int)] = 1
   
-    # TODO: this copy here might not be needed
-    X_d = np.copy(X)
-    X_d[:, 0:-1] = X_d[:, 0:-1]*d_idx.T
-    
-
-    return X_d.dot(self.W)
+    self.prevZ[:, 0:-1] = self.prevZ[:, 0:-1]*d_idx.T
 
   def compute_activation(self, X, doDropout=False, dropoutProb=0.5,
       testing=False):
@@ -86,7 +98,8 @@ class Layer:
     if doDropout:
       # We are not testing, so do dropout
       if not testing:
-        self.random_dropout(dropoutProb)
+        self.dpp_dropout(dropoutProb)
+        #self.random_dropout(dropoutProb)
         self.a = self.prevZ.dot(self.W)
 
       # We are testing, so we don't do dropout but we do scale the weights
@@ -306,7 +319,7 @@ if __name__ == "__main__":
           learningRate, p)
 
 
-      if i%(10*minibatchSize)==0:
+      if i%(1*minibatchSize)==0:
         bdp.progBar(i, X_tr.shape[0])
     bdp.progBar(X_tr.shape[0], X_tr.shape[0])
 
