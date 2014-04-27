@@ -1,6 +1,15 @@
 import numpy as np
 import sys
 
+def decompose_kernel(L):
+  D, V = np.linalg.eig(L)
+  D = np.real(D)
+  D[D<0] = 0
+  idx = np.argsort(D)
+  D = D[idx]
+  V = np.real(V[:, idx])
+  return D, V
+
 def esym_poly(k, lam):
   N = lam.size
   E = np.zeros((k+1, N+1))
@@ -22,6 +31,9 @@ def sample_k(k, lam, V_full):
     if i == remaining:
       marg = 1.0
     else:
+      if E[remaining+1, i+1] == 0:
+        i = i-1
+        continue
       marg = lam[i]*E[remaining, i]/E[remaining+1, i+1]
 
     if np.random.rand() < marg:
@@ -36,13 +48,11 @@ def sample_k(k, lam, V_full):
 
   for i in range(k, 0, -1):
     # Sample
-    #Pr = 1.0/(float(V.shape[1]))*np.sum(np.power(V, 2), 1)
-    #C = np.cumsum(Pr)
-    #Y[i] = np.sum((np.random.rand()>C).astype(int))
-    Pr = np.sum(V**2, 1)
+    Pr = np.sum(V**2, axis=1)
     Pr = Pr/sum(Pr)
     C = np.cumsum(Pr)
-    Y[i] = np.argwhere(np.random.rand() <= C)[0]
+    jj = np.argwhere(np.random.rand() <= C)[0]
+    Y[i] = jj
 
     # Update V 
     j = np.argwhere(V[int(Y[i]), :])[0]
@@ -50,11 +60,8 @@ def sample_k(k, lam, V_full):
     V = np.delete(V, j, 1)
     V = V - np.outer(Vj, V[int(Y[i]), :]/Vj[int(Y[i])])
 
-    # GS orthogonalization
-    for a in range(i):
-      for b in range(a):
-        V[:, a] = V[:, a] - (V[:, a].dot(V[:, b]))*(V[:, b])
-
-      V[:, a] = V[:, a]/np.linalg.norm(V[:, a])
+    # QR decomposition, which is more numerically stable (and faster) than Gram
+    # Schmidt
+    V, r = np.linalg.qr(V)
 
   return Y

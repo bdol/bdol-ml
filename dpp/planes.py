@@ -4,7 +4,7 @@ import dpp
 import sys
 
 # Width, height of the sampling grid
-n = 30
+n = 50
 x, y = np.meshgrid(range(1, n+1), range(1, n+1))
 x = 1/float(n)*(x.flatten())
 y = 1/float(n)*(y.flatten())
@@ -23,17 +23,12 @@ y_uniform = y[idx[:k]]
 sigma = 0.1
 L = np.exp(- ( np.power(x - x[:, None], 2) + 
                np.power(y - y[:, None], 2) )/(sigma**2))
-D, V = np.linalg.eig(L)
-D = np.real(D[::-1])
-V = np.real(np.fliplr(V))
+D, V = dpp.decompose_kernel(L)
 Y = dpp.sample_k(k, D, V)
 print "Done Gaussian!"
 
 L = np.power(np.outer(x, x)+np.outer(y, y), 2)
-D, V = np.linalg.eig(L)
-D, V = np.linalg.eig(L)
-D = np.real(D[::-1])
-V = np.real(np.fliplr(V))
+D, V = dpp.decompose_kernel(L)
 Y2 = dpp.sample_k(k, D, V)
 
 # Plot both
