@@ -57,7 +57,7 @@ class Layer:
     if dropoutProb == 0:
       return
 
-    W_n = self.W[0:-1, :]/np.linalg.norm(self.W[0:-1, :], axis=0)
+    W_n = self.W[0:-1, :]/(np.atleast_2d(np.linalg.norm(self.W[0:-1, :], axis=1)).T)
     L = (W_n.dot(W_n.T))**2
     D, V = dpp.decompose_kernel(L)
     
@@ -373,3 +373,4 @@ if __name__ == "__main__":
 
   if logToFile:
     f.close()
+
