@@ -2,7 +2,7 @@ import numpy as np
 import sys
 
 def decompose_kernel(L):
-  D, V = np.linalg.eig(L)
+  D, V = np.linalg.eigh(L)
   D = np.real(D)
   D[D<0] = 0
   idx = np.argsort(D)
@@ -65,3 +65,4 @@ def sample_k(k, lam, V_full):
     V, r = np.linalg.qr(V)
 
   return Y
+

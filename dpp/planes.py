@@ -10,7 +10,7 @@ x = 1/float(n)*(x.flatten())
 y = 1/float(n)*(y.flatten())
 
 # Number of samples to generate
-k = 60
+k = 100
 
 # Randomly sample k points
 idx = np.arange(x.size)
@@ -23,6 +23,7 @@ y_uniform = y[idx[:k]]
 sigma = 0.1
 L = np.exp(- ( np.power(x - x[:, None], 2) + 
                np.power(y - y[:, None], 2) )/(sigma**2))
+(s, logdet) = np.linalg.slogdet(L)
 D, V = dpp.decompose_kernel(L)
 Y = dpp.sample_k(k, D, V)
 print "Done Gaussian!"
