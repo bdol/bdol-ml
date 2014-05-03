@@ -20,6 +20,31 @@ def esym_poly(k, lam):
 
   return E
 
+def E_Y(lam):
+  return np.sum(lam/(1+lam))
+
+def modifyLam(lam, c):
+  return c*lam/(1+lam*(1-c))
+
+def analyze_bDPP(lam):
+  print "Ground set size:\t{0}".format(len(lam))
+  d = E_Y(lam)
+  print "E[|Y|]:\t\t\t{0}".format(d)
+  print "Maximum eigenvalue:\t{0}".format(np.max(lam)+1)
+  cmax = 1/(np.max(lam)) + 1
+  print "Maximum k:\t\t{0}".format(cmax*d)
+
+def sample_EY(lam, V_full, k):
+  d = E_Y(lam)
+  cmax = 1/(np.max(lam)) + 1
+  c = k/d
+  if c>cmax:
+    print "Warning: c>cmax. Continuing with regular DPP."
+    return sample(lam, V_full)
+
+  L_C = modifyLam(lam, c)
+  return sample(L_C, V_full)
+
 def sample(lam, V_full):
   D = lam/(1+lam)
   v = np.random.rand(1, len(lam)) <= D
