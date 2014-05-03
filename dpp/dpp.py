@@ -76,7 +76,7 @@ def sample_k(k, lam, V_full):
   Y = np.zeros((len(J), 1))
   V = V_full[:, J]
 
-  for i in range(k, 0, -1):
+  for i in range(k, -1, -1):
     # Sample
     Pr = np.sum(V**2, axis=1)
     Pr = Pr/sum(Pr)
