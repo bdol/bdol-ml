@@ -78,6 +78,28 @@ class Layer:
   
     self.prevZ[:, 0:-1] = self.prevZ[:, 0:-1]*d_idx.T
 
+  def dpp_dropin_EY(self, dropoutProb):
+    if dropoutProb == 0:
+      return
+
+    p = (1-dropoutProb)
+    W_n = self.W[0:-1, :]
+    L = (W_n.dot(W_n.T))**2
+    D, V = dpp.decompose_kernel(L)
+    (kmax, d) = dpp.analyze_bDPP(D)
+    print kmax
+    if kmax>=(p*L.shape[0]):
+      print "DPP!"
+      J = dpp.sample_EY(D, V, p*L.shape[0])
+      d_idx = np.zeros((self.W.shape[0]-1, 1))
+      d_idx[J.astype(int)] = 1
+      self.prevZ[:, 0:-1] = self.prevZ[:, 0:-1]*d_idx.T
+      
+    else:
+      self.random_dropout(dropoutProb)
+    
+    #print dpp.analyze_bDPP(D)
+
   def dpp_dropout_norm(self, dropoutProb):
     if dropoutProb == 0:
       return
@@ -173,7 +195,8 @@ class MLP:
                         'dpp_dropout': l.dpp_dropout,
                         'dpp_dropin_norm': l.dpp_dropin_norm,
                         'dpp_dropin': l.dpp_dropin,
-                        'dpp_dropin_uniform': l.dpp_uniform_dropin,
+                        'dpp_dropin_uniform': l.dpp_dropin_uniform,
+                        'dpp_dropin_EY': l.dpp_dropin_EY,
                         'random': l.random_dropout}
 
       l.dropoutFunction = dropoutTypeMap[dropoutType]
