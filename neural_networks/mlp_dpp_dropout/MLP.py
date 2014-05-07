@@ -3,27 +3,16 @@ import ast
 import cPickle as pickle
 import dpp
 import numpy as np
+import os
 import shutil
 import sys
 import time
 import uuid
 
-def save_state(model, params, modelFilename, paramsFilename):
-  pickle.dump(model, open(modelFilename, "wb"))
-  pickle.dump(model, open(paramsFilename, "wb"))
+def save_state(params, paramsFilename):
+  pickle.dump(params, open(paramsFilename, "wb"))
 
   return 0
-
-def load_state(modelFilename, paramsFilename):
-  model = pickle.load(open(modelFilename, "rb"))
-  params = pickle.load(open(experimentFilename, "rb"))
-  return (model, params)
-
-def get_help():
-  '''
-  Returns a string for help about this class.
-  '''
-  pass
 
 def rectified_linear(X):
   return np.maximum(X, 0.0)
@@ -86,13 +75,15 @@ class Parameters:
       logFile: The name of the log file (if applicable)
       saveState: True/False, whether or not to save the state at a given time
       saveStateInterval: Save the model every x epochs
-      saveStateUnique: Save a unique version of the model at each point
+      saveStateUnique: T/F, Save a unique version of the model at each point
       saveStateBaseName: The base of the saved state filename 
 
   To initialize an experiment, pass it a params.ini file specifying the value
   for each option. An example params.ini file is given in this directory.
   '''
   def __init__(self, paramsFilename=None):
+    self.model = None
+
     # Model parameters
     self.layerSizes = None
     self.activations = None
@@ -128,6 +119,9 @@ class Parameters:
 
     if paramsFilename:
       self.parseParamsFile(paramsFilename)
+
+  def initLog(self):
+    self.logFile = open(self.logFileName, "a")
 
   def parseParamsFile(self, paramsFilename):
     '''
@@ -175,30 +169,60 @@ class Parameters:
       dateStr = time.strftime('%Y-%m-%d_%H-%M')
       # Add a UUID so we can track this experiment
       uuidStr = str(uuid.uuid1())
-      self.logFile = self.logFileBaseName+self.name+"_"+dateStr+"_"+uuidStr+".txt"
-      print self.logFile
-      self.logF = open(self.logFile, "w")
-      self.logF.write('Num. Errors Train,Num. Errors Test,learningRate,momentum,elapsedTime\n')
+      self.logFileName = os.path.abspath(self.logFileBaseName+self.name+"_"+dateStr+"_"+uuidStr+".txt")
+      self.logFile = open(self.logFileName, "w")
+      self.logFile.write('Num. Errors Train,Num. Errors Test,learningRate,momentum,elapsedTime\n')
       # Also copy the params over for posterity
       paramsCopyStr = self.logFileBaseName+"params_"+str(uuidStr)+".ini"
       shutil.copyfile(paramsFilename, paramsCopyStr)
 
+    self.saveState = ast.literal_eval(cfg.get('program', 'saveState'))
+    self.saveStateInterval = ast.literal_eval(cfg.get('program', 'saveStateInterval'))
+    self.saveStateUnique = ast.literal_eval(cfg.get('program', 'saveStateUnique'))
+    self.saveStateBaseName = cfg.get('program', 'saveStateBaseName')
+
   def update(self):
     '''
-    Updates all the paramters for the next epoch.
+    Updates all the paramters for the next epoch. Also saves the model.
     '''
+    self.currentEpoch += 1
+
     self.currentLearningRate = self.currentLearningRate*self.rateDecay
     if self.currentEpoch < self.momentumT:
-      self.momentumCurrent = (1.0-float(t)/self.momentumT)*self.momentumInitial + (float(t)/self.momentumT)*self.momentumFinal
+      self.momentumCurrent = \
+          (1.0-float(self.currentEpoch)/self.momentumT)*self.momentumInitial + \
+          (float(self.currentEpoch)/self.momentumT)*self.momentumFinal
     else:
       self.momentumCurrent = self.momentumFinal
 
+    if self.saveState and self.currentEpoch%self.saveStateInterval==0:
+
+      modelFileName = os.path.join(self.saveStateBaseName, "model")
+      paramsFileName = os.path.join(self.saveStateBaseName, "params")
+
+      self.logFile.close()
+      self.logFile = None
+      if self.saveStateUnique:
+        dateStr = '_'+time.strftime('%Y-%m-%d_%H-%M-%S')
+        modelFileName += dateStr
+        paramsFileName += dateStr
+
+      modelFileName += '.pkl'
+      paramsFileName += '.pkl'
+      print "Saving to {0}...".format(paramsFileName)
+      save_state(self, paramsFileName)
+
+      self.logFile = open(self.logFileName, "a")
+
   def log(self, logStr):
-    self.logF.write(logStr)
-    self.logF.flush()
+    self.logFile.write(logStr)
+    self.logFile.flush()
 
   def cleanup(self):
-    self.logF.close()
+    self.logFile.close()
+
+  def __getstate__(self): return self.__dict__
+  def __setstate__(self, d): self.__dict__.update(d)
 
   def __str__(self):
     s = "{:<40}{:<10}\n".format("Name", self.name)
@@ -281,7 +305,6 @@ class Layer:
     (kmax, d) = dpp.analyze_bDPP(D)
     print kmax
     if kmax>=(p*L.shape[0]):
-      print "DPP!"
       J = dpp.sample_EY(D, V, p*L.shape[0])
       d_idx = np.zeros((self.W.shape[0]-1, 1))
       d_idx[J.astype(int)] = 1
@@ -393,6 +416,9 @@ class MLP:
       l.dropoutFunction = dropoutTypeMap[params.dropoutType]
       self.layers.append(l)
       self.currentGrad.append(np.zeros(size))
+
+  def __getstate__(self): return self.__dict__
+  def __setstate__(self, d): self.__dict__.update(d)
 
   def forward_propagate(self, X, testing=False, dropoutSeeds=None):
     x_l = np.atleast_2d(X)
