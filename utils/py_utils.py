@@ -1,5 +1,5 @@
 """
-A set of ML-related functions that are used in a variety of models.
+Contains a list of python utility functions.
 
 ==============
 Copyright Info
@@ -21,24 +21,7 @@ Copyright Brian Dolhansky 2014
 bdolmail@gmail.com
 """
 
-
-import numpy as np
-
-"""
-A common function used to compute the entropy. This is a "safe" entropy
-function in that invalid values (NaN or inf) are clamped to 0. This is used
-in the decision tree module where dividing by 0 could happen.
-"""
-def safe_plogp(x):
-    e = x * np.log2(x)
-    # Set values outside the range of log to 0
-    e[np.isinf(e)] = 0
-    e[np.isnan(e)] = 0
-    return e
-
-"""
-The standard entropy function, using the "safe" plogp function which clamps
-invalid inputs to 0.
-"""
-def safe_entropy(x):
-    return -np.sum(safe_plogp(x), axis=0)
+def deep_del_from_dict(d, k):
+    new_d = dict(d)
+    del new_d[k]
+    return new_d

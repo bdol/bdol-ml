@@ -1,9 +1,8 @@
 """
-A single decision tree. Includes functions to both train and test on given
-numerical data. The decision tree evaluates 10 splits for each feature
-(spaced linearly between the min/max feature values) and splits based on
-entropy. For an example on how to run this tree with MNIST,
-see run_decision_tree.py
+This is the same as the original decision tree class, except the
+choose_feature function has been optimized. The original function, although
+easy to read, was too slow to use in random forests. I have memoized some
+parts (namely the split values) and vectorized the feature computation.
 
 ==============
 Copyright Info
@@ -27,9 +26,10 @@ bdolmail@gmail.com
 
 
 from interface_utils import prog_bar
-from ml_functions import safe_entropy
+from ml_functions import safe_entropy, safe_plogp
+from py_utils import *
 import numpy as np
-
+import operator
 
 class Node():
     def __init__(self):
@@ -41,13 +41,13 @@ class Node():
         self.target_value = []
 
 
-class DecisionTree():
+class FastDecisionTree():
     def __init__(self, max_depth, num_splits):
         self.max_depth = max_depth
         self.num_splits = num_splits
 
-    def _choose_feature(self, train_data, train_target, x_range,
-                        remaining_features):
+    def _choose_feature(self, train_data, train_target, x_range):
+
         py = np.mean(train_target, axis=0)
         H = safe_entropy(py[:, None])
 
@@ -56,47 +56,42 @@ class DecisionTree():
         best_split_val = -1
 
         t = 1
-        for x_i in remaining_features:
-            prog_bar(t, len(remaining_features))
-            t += 1
+        sorted_x_range = sorted(x_range.items(), key=operator.itemgetter(0))
+        for s in range(self.num_splits):
 
-            # Here, we take num_splits over the range of features, each of
-            # which we will evaluate. We do not include the last value,
-            # because all features will be less than or equal to this value.
-            split_vals = np.linspace(np.min(x_range[x_i]),
-                                     np.max(x_range[x_i]),
-                                     self.num_splits,
-                                     endpoint=False)
+            splits = [l[1][s] for l in sorted_x_range]
+            split = (train_data <= splits)
 
-            # If there are no informative splits, then skip this feature
-            if split_vals[0] == split_vals[-1]:
-                continue
+            sum_x = np.sum(split.astype(float), axis=0)
+            sum_notx = train_data.shape[0] - sum_x
 
-            for split_val in split_vals:
-                split = (train_data[:, x_i] <= split_val).astype(float)
+            py_given_x = np.zeros((train_target.shape[1], len(x_range)))
+            py_given_notx = np.zeros((train_target.shape[1], len(x_range)))
 
-                sum_x = np.sum(split, axis=0).astype(float)
-                sum_notx = train_data.shape[0] - sum_x
+            for y in range(train_target.shape[1]):
+                prog_bar(t, self.num_splits*train_target.shape[1])
+                t += 1
 
-                py_given_x = np.zeros((train_target.shape[1], 1))
-                py_given_notx = np.zeros((train_target.shape[1], 1))
+                y_given_x = (split & (train_target[:, y]==1)[:, None])
+                y_given_notx = ((split == False) & (train_target[:, y]==1)[:,
+                                                   None])
 
-                for y in range(train_target.shape[1]):
-                    y_given_x = ((split==1) & (train_target[:, y]==1))
-                    y_given_notx = ((split==0) & (train_target[:, y]==1))
-                    py_given_x[y] = np.sum(y_given_x) / sum_x
-                    py_given_notx[y] = np.sum(y_given_notx) / sum_notx
+                y_given_x_sum = np.sum(y_given_x.astype(float), axis=0)
+                y_given_notx_sum = np.sum(y_given_notx.astype(float), axis=0)
 
+                py_given_x[y, :] = y_given_x_sum / sum_x
+                py_given_notx[y, :] = y_given_notx_sum / sum_notx
 
-                # Compute the conditional entropy and information gain
-                px = np.mean(split)
-                cond_H = px * safe_entropy(py_given_x) + (1 - px) * safe_entropy(py_given_notx)
-                ig = H - cond_H
+            px = np.mean(split, axis=0)
+            cond_H = px * safe_entropy(py_given_x) + (1 - px) * safe_entropy(py_given_notx)
+            ig = H - cond_H
+            ig_max = np.max(ig)
+            ig_argmax = np.argmax(ig)
 
-                if ig > max_ig:
-                    max_ig = ig
-                    split_feature = x_i
-                    best_split_val = split_val
+            if ig_max > max_ig:
+                max_ig = ig_max
+                split_feature = sorted_x_range[ig_argmax][0]
+                best_split_val = splits[ig_argmax]
 
         return split_feature, best_split_val, max_ig
 
@@ -105,8 +100,7 @@ class DecisionTree():
     """
 
     def _split_node(self, train_data, train_target, x_range,
-                    default_value, remaining_features,
-                    depth):
+                    default_value, depth):
 
         node = Node()
 
@@ -119,9 +113,9 @@ class DecisionTree():
         # 4) There are no examples at this node (return the default value)
         py = np.mean(train_target, axis=0)
         if depth == self.max_depth or \
-                        len(remaining_features) == 0 or \
+                        len(x_range) == 0 or \
                         np.max(py) == 1 or \
-                        train_target.shape[0] <= 1:
+                        train_data.shape[0] <= 1:
             node.terminal = True
 
             if train_target.shape[0] == 0:
@@ -135,15 +129,21 @@ class DecisionTree():
 
         print "Splitting at depth {0}...".format(depth)
         node.split_feature, node.split_val, max_ig = self._choose_feature(
-            train_data, train_target, x_range, remaining_features)
+            train_data, train_target, x_range)
+        sorted_keys = x_range.keys()
+        sorted_keys.sort()
+        data_split_feature = sorted_keys.index(node.split_feature)
 
         node.target_value = np.mean(train_target, 0)
-        remaining_features = np.delete(remaining_features,
-                                       np.where(
-                                           remaining_features == node.split_feature))
 
-        leftidx = train_data[:, node.split_feature] <= node.split_val
-        rightidx = train_data[:, node.split_feature] > node.split_val
+        # Remove the feature from consideration and from the training data
+        x_range = deep_del_from_dict(x_range, node.split_feature)
+        mask = np.ones(train_data.shape[1], dtype=bool)
+        mask[data_split_feature] = False
+        train_data = train_data[:, mask]
+
+        leftidx = train_data[:, data_split_feature] <= node.split_val
+        rightidx = train_data[:, data_split_feature] > node.split_val
 
         print "depth: {0} [{1}]: Split on feature {2}. L/R = {3}/{4}".format(
             depth, train_target.shape[0], node.split_feature, np.sum(leftidx),
@@ -153,14 +153,12 @@ class DecisionTree():
                                      train_target[leftidx],
                                      x_range,
                                      node.target_value,
-                                     remaining_features,
                                      depth + 1)
 
         node.right = self._split_node(train_data[rightidx, :],
                                       train_target[rightidx],
                                       x_range,
                                       node.target_value,
-                                      remaining_features,
                                       depth + 1)
 
         return node
@@ -177,15 +175,32 @@ class DecisionTree():
 
     def train(self, train_data, train_target):
         # Compute the range of values for each feature
-        x_range = []
-        for j in range(0, train_data.shape[1]):
-            x_range.append(np.unique(train_data[:, j]))
+        M = train_data.shape[1]
 
-        return self._split_node(train_data,
+        # Here, we only consider informative features (not a single value
+        # over all examples). We store these informative features as a tuple
+        # containing the feature index and the feature splits. Therefore
+        # we don't need the remaining_features list.
+        mask = np.ones(M, dtype=bool)
+        x_range = dict()
+        for j in range(0, M):
+            vals = np.unique(train_data[:, j])
+            if vals[0] != vals[-1]:
+                f_range = np.linspace(vals[0], vals[-1], self.num_splits,
+                                    endpoint=False)
+                x_range[j] = f_range
+            else:
+                mask[j] = False
+        train_data_mod = np.copy(train_data[:, mask])
+
+        print "Removed {0} uninformative features (out of {1}).".format(
+            M-len(x_range), M
+        )
+
+        return self._split_node(train_data_mod,
                                 train_target,
                                 x_range,
                                 np.mean(train_target.astype(float), axis=0),
-                                np.arange(0, train_data.shape[1]),
                                 0)
 
     def test(self, root, test_data, test_target):
