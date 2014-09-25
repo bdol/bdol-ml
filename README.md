@@ -10,7 +10,8 @@ present in this repository. Most of the code is written in Python and MATLAB,
 and specific dependencies for each project are noted. Each example will have an
 associated blog post on my personal website (http://briandolhansky.com/).
 
-The following items will be added to this repository in the future:
+The following items will be added to this repository (with associated blog
+posts) in the future:
 
 Regression
 - Ridge Regression
@@ -21,6 +22,10 @@ Logistic Regression
 - Simple LR, stochastic gradient descent
 - Sparse LR (L1 regularized)
 - LR for big data
+
+Decision Trees
+- Single decision tree
+- Random forest
 
 Determinantal Point Processes
 - Simple DPP on a 2D grid of points
