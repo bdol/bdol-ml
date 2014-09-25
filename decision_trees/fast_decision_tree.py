@@ -30,6 +30,7 @@ from ml_functions import safe_entropy, safe_plogp
 from py_utils import *
 import numpy as np
 import operator
+from copy import deepcopy
 
 class Node():
     def __init__(self):
@@ -62,7 +63,7 @@ class FastDecisionTree():
             splits = [l[1][s] for l in sorted_x_range]
             split = (train_data <= splits)
 
-            sum_x = np.sum(split.astype(float), axis=0)
+            sum_x = (np.sum(split, axis=0)).astype(float)
             sum_notx = train_data.shape[0] - sum_x
 
             py_given_x = np.zeros((train_target.shape[1], len(x_range)))
@@ -76,8 +77,8 @@ class FastDecisionTree():
                 y_given_notx = ((split == False) & (train_target[:, y]==1)[:,
                                                    None])
 
-                y_given_x_sum = np.sum(y_given_x.astype(float), axis=0)
-                y_given_notx_sum = np.sum(y_given_notx.astype(float), axis=0)
+                y_given_x_sum = (np.sum(y_given_x, axis=0)).astype(float)
+                y_given_notx_sum = (np.sum(y_given_notx, axis=0)).astype(float)
 
                 py_given_x[y, :] = y_given_x_sum / sum_x
                 py_given_notx[y, :] = y_given_notx_sum / sum_notx
@@ -99,10 +100,12 @@ class FastDecisionTree():
     This is the recursive function we use to iteratively build the tree.
     """
 
-    def _split_node(self, train_data, train_target, x_range,
+    def _split_node(self, train_data, train_target, remaining_features,
                     default_value, depth):
 
         node = Node()
+
+        # Figure out the ranges of the remaining features
 
         # We need to check various conditions here to see if we should stop
         # training this branch. Specifically if one of the conditions is met,
@@ -113,7 +116,7 @@ class FastDecisionTree():
         # 4) There are no examples at this node (return the default value)
         py = np.mean(train_target, axis=0)
         if depth == self.max_depth or \
-                        len(x_range) == 0 or \
+                        len(remaining_features) == 0 or \
                         np.max(py) == 1 or \
                         train_data.shape[0] <= 1:
             node.terminal = True
@@ -127,17 +130,27 @@ class FastDecisionTree():
                 depth, train_target.shape[0], node.target_value)
             return node
 
+        x_range = dict()
+        for j in range(len(remaining_features)):
+            min_val = np.min(train_data[:, j], axis=0)
+            max_val = np.max(train_data[:, j], axis=0)
+            x_range[remaining_features[j]] = np.linspace(min_val,
+                                                         max_val,
+                                                         self.num_splits,
+                                                         endpoint=False)
         print "Splitting at depth {0}...".format(depth)
         node.split_feature, node.split_val, max_ig = self._choose_feature(
             train_data, train_target, x_range)
-        sorted_keys = x_range.keys()
-        sorted_keys.sort()
-        data_split_feature = sorted_keys.index(node.split_feature)
+        # sorted_keys = x_range.keys()
+        # sorted_keys.sort()
 
         node.target_value = np.mean(train_target, 0)
 
         # Remove the feature from consideration and from the training data
-        x_range = deep_del_from_dict(x_range, node.split_feature)
+        # x_range = deep_del_from_dict(x_range, node.split_feature)
+        data_split_feature = remaining_features.index(node.split_feature)
+        remaining_features_copy = deepcopy(remaining_features)
+        remaining_features_copy.remove(node.split_feature)
         mask = np.ones(train_data.shape[1], dtype=bool)
         mask[data_split_feature] = False
         train_data = train_data[:, mask]
@@ -151,13 +164,13 @@ class FastDecisionTree():
 
         node.left = self._split_node(train_data[leftidx, :],
                                      train_target[leftidx],
-                                     x_range,
+                                     remaining_features_copy,
                                      node.target_value,
                                      depth + 1)
 
         node.right = self._split_node(train_data[rightidx, :],
                                       train_target[rightidx],
-                                      x_range,
+                                      remaining_features_copy,
                                       node.target_value,
                                       depth + 1)
 
@@ -182,25 +195,23 @@ class FastDecisionTree():
         # containing the feature index and the feature splits. Therefore
         # we don't need the remaining_features list.
         mask = np.ones(M, dtype=bool)
-        x_range = dict()
+        remaining_features = []
         for j in range(0, M):
             vals = np.unique(train_data[:, j])
             if vals[0] != vals[-1]:
-                f_range = np.linspace(vals[0], vals[-1], self.num_splits,
-                                    endpoint=False)
-                x_range[j] = f_range
+                remaining_features.append(j)
             else:
                 mask[j] = False
         train_data_mod = np.copy(train_data[:, mask])
 
         print "Removed {0} uninformative features (out of {1}).".format(
-            M-len(x_range), M
+            M-len(remaining_features), M
         )
 
         return self._split_node(train_data_mod,
                                 train_target,
-                                x_range,
-                                np.mean(train_target.astype(float), axis=0),
+                                remaining_features,
+                                np.mean(train_target, axis=0),
                                 0)
 
     def test(self, root, test_data, test_target):

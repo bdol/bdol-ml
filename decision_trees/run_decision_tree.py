@@ -42,10 +42,10 @@ print "Training decision tree..."
 
 # Comment the following two lines and uncomment the two lines following that
 # if you want a faster version of the decision tree.
-dt = DecisionTree(6, 10)
-root = dt.train(train_data, train_target)
-# fast_dt = FastDecisionTree(10, 10)
-# root = fast_dt.train(train_data, train_target)
+# dt = DecisionTree(6, 10)
+# root = dt.train(train_data, train_target)
+fast_dt = FastDecisionTree(10, 10)
+root = fast_dt.train(train_data, train_target)
 print "Done training!"
 print "Testing..."
 err = fast_dt.test(root, test_data, test_target)
