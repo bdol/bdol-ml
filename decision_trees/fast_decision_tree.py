@@ -4,6 +4,9 @@ choose_feature function has been optimized. The original function, although
 easy to read, was too slow to use in random forests. I have memoized some
 parts (namely the split values) and vectorized the feature computation.
 
+In addition, I added an additional parameter for use in random forests,
+a feature subsampling percentage to consider at each split.
+
 ==============
 Copyright Info
 ==============
@@ -43,11 +46,34 @@ class Node():
 
 
 class FastDecisionTree():
-    def __init__(self, max_depth, num_splits):
+    def __init__(self, max_depth, num_splits, feat_subset=1.0, debug=False):
         self.max_depth = max_depth
         self.num_splits = num_splits
+        self.feat_subset = feat_subset
+        self.debug = debug
 
-    def _choose_feature(self, train_data, train_target, x_range):
+    # TODO: this should probably be refactored
+    def _choose_feature(self, train_data_original, train_target,
+                        x_range_original):
+
+        # Subsample the features, if applicable
+        train_data = None
+        x_range = dict()
+        if self.feat_subset != 1.0:
+            r = np.random.rand(train_data_original.shape[1])
+            keep_idx = r < self.feat_subset
+
+            train_data = train_data_original[:, keep_idx]
+            sorted_keys = sorted(x_range_original.keys())
+            for i in range(len(keep_idx)):
+                if keep_idx[i]:
+                    x_range[sorted_keys[i]] = x_range_original[sorted_keys[i]]
+
+        else:
+            train_data = train_data_original
+            x_range = x_range_original
+
+        sorted_x_range = sorted(x_range.items(), key=operator.itemgetter(0))
 
         py = np.mean(train_target, axis=0)
         H = safe_entropy(py[:, None])
@@ -57,7 +83,6 @@ class FastDecisionTree():
         best_split_val = -1
 
         t = 1
-        sorted_x_range = sorted(x_range.items(), key=operator.itemgetter(0))
         for s in range(self.num_splits):
 
             splits = [l[1][s] for l in sorted_x_range]
@@ -70,8 +95,9 @@ class FastDecisionTree():
             py_given_notx = np.zeros((train_target.shape[1], len(x_range)))
 
             for y in range(train_target.shape[1]):
-                prog_bar(t, self.num_splits*train_target.shape[1])
-                t += 1
+                if self.debug:
+                    prog_bar(t, self.num_splits*train_target.shape[1])
+                    t += 1
 
                 y_given_x = (split & (train_target[:, y]==1)[:, None])
                 y_given_notx = ((split == False) & (train_target[:, y]==1)[:,
@@ -126,8 +152,9 @@ class FastDecisionTree():
             else:
                 node.target_value = np.mean(train_target, 0)
 
-            print "*** depth: {0} [{1}]: Leaf predictions: {2}".format(
-                depth, train_target.shape[0], node.target_value)
+            if self.debug:
+                print "*** depth: {0} [{1}]: Leaf predictions: {2}".format(
+                    depth, train_target.shape[0], node.target_value)
             return node
 
         x_range = dict()
@@ -138,16 +165,15 @@ class FastDecisionTree():
                                                          max_val,
                                                          self.num_splits,
                                                          endpoint=False)
-        print "Splitting at depth {0}...".format(depth)
+        if self.debug:
+            print "Splitting at depth {0}...".format(depth)
+
         node.split_feature, node.split_val, max_ig = self._choose_feature(
             train_data, train_target, x_range)
-        # sorted_keys = x_range.keys()
-        # sorted_keys.sort()
 
         node.target_value = np.mean(train_target, 0)
 
         # Remove the feature from consideration and from the training data
-        # x_range = deep_del_from_dict(x_range, node.split_feature)
         data_split_feature = remaining_features.index(node.split_feature)
         remaining_features_copy = deepcopy(remaining_features)
         remaining_features_copy.remove(node.split_feature)
@@ -158,9 +184,10 @@ class FastDecisionTree():
         leftidx = train_data[:, data_split_feature] <= node.split_val
         rightidx = train_data[:, data_split_feature] > node.split_val
 
-        print "depth: {0} [{1}]: Split on feature {2}. L/R = {3}/{4}".format(
-            depth, train_target.shape[0], node.split_feature, np.sum(leftidx),
-            np.sum(rightidx))
+        if self.debug:
+            print "depth: {0} [{1}]: Split on feature {2}. L/R = {3}/{4}".format(
+                depth, train_target.shape[0], node.split_feature, np.sum(leftidx),
+                np.sum(rightidx))
 
         node.left = self._split_node(train_data[leftidx, :],
                                      train_target[leftidx],
@@ -204,9 +231,10 @@ class FastDecisionTree():
                 mask[j] = False
         train_data_mod = np.copy(train_data[:, mask])
 
-        print "Removed {0} uninformative features (out of {1}).".format(
-            M-len(remaining_features), M
-        )
+        if self.debug:
+            print "Removed {0} uninformative features (out of {1}).".format(
+                M-len(remaining_features), M
+            )
 
         return self._split_node(train_data_mod,
                                 train_target,
@@ -222,3 +250,10 @@ class FastDecisionTree():
                 errs += 1.0
 
         return errs/test_data.shape[0]
+
+    def test_preds(self, root, test_data, test_target):
+        yhat = np.zeros((test_data.shape[0], 1))
+        for i in range(0, test_data.shape[0]):
+            yhat[i] = np.argmax(self._dt_value(root, test_data[i, :]))
+
+        return yhat

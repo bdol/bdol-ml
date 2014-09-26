@@ -26,6 +26,7 @@ Logistic Regression
 Decision Trees
 - Single decision tree
 - Random forest
+- Gradient tree boosting
 
 Determinantal Point Processes
 - Simple DPP on a 2D grid of points

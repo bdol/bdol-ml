@@ -1,7 +1,5 @@
 """
-An example that runs a single decision tree using MNIST. This single tree can
-achieve ~20% error rate on a random 70/30 train/test split on the original MNIST
-data (with a depth limit of 10).
+An example that runs my implementation of random forests.
 
 ==============
 Copyright Info
@@ -23,8 +21,7 @@ Copyright Brian Dolhansky 2014
 bdolmail@gmail.com
 """
 
-from decision_tree import DecisionTree
-from fast_decision_tree import FastDecisionTree
+from random_forest import RandomForest
 from sklearn.datasets import fetch_mldata
 from data_utils import integral_to_indicator, split_train_test
 import numpy as np
@@ -34,22 +31,19 @@ mnist = fetch_mldata('MNIST original', data_home='/home/bdol/data')
 train_data, test_data, train_target, test_target = split_train_test(mnist.data,
                                                                     mnist.target)
 train_target = integral_to_indicator(train_target)
-test_target = integral_to_indicator(test_target)
+test_target_integral = integral_to_indicator(test_target)
 print "Done!"
 
 np.seterr(all='ignore')
-print "Training decision tree..."
 
-# Comment the following two lines and uncomment the two lines following that
-# if you want a faster version of the decision tree.
-# dt = DecisionTree(6, 10)
-# root = dt.train(train_data, train_target)
-fast_dt = FastDecisionTree(10, 10, feat_subset=0.3)
-root = fast_dt.train(train_data, train_target)
+print "Training random forest..."
+rf = RandomForest(20, 10, 3, boot_percent=0.3, feat_percent=0.1, debug=True)
+rf.train(train_data, train_target)
 print "Done training!"
+
 print "Testing..."
-err = fast_dt.test(root, test_data, test_target)
+yhat = rf.test(test_data, test_target_integral)
+err = (np.sum(yhat != test_target[:, None]).astype(float))/test_target.shape[0]
 print "Error rate: {0}".format(err)
 
 print "Done!"
-
