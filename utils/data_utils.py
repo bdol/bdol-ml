@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 """
 Randomly samples p percent of the given data for train and uses the other 1-p
@@ -31,3 +32,27 @@ def integral_to_indicator(integral_target):
         y[i, int(integral_target[i])] = 1.0
 
     return y
+
+def RMSE(yhat, y):
+    n = yhat.shape[0]
+    return np.sqrt(1.0/n*np.sum(np.square(yhat-y)))
+
+"""
+For each of the variables specified in vars, plot a 2-D plot of the target
+vs. the feature.
+"""
+def plot_regressors(data, target, vars=None, descr=None):
+    if vars == None:
+        vars = range(0, data.shape[1])
+
+    for i in vars:
+        fig = plt.figure()
+        plt.scatter(data[:, i], target)
+        if descr == None:
+            plt.xlabel("Variable {0}".format(i))
+        else:
+            plt.xlabel("{0}".format(descr[i]))
+        plt.ylabel("Target")
+        plt.show()
+        plt.close(fig)
+

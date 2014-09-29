@@ -140,7 +140,11 @@ class FastDecisionTree():
         # 2) There are no more features to split on
         # 3) All of the examples have the same label
         # 4) There are no examples at this node (return the default value)
-        py = np.mean(train_target, axis=0)
+        if train_data.shape[0] != 0:
+            py = np.mean(train_target, axis=0)
+        else:
+            py = np.zeros((1, train_data.shape[1]))
+
         if depth == self.max_depth or \
                         len(remaining_features) == 0 or \
                         np.max(py) == 1 or \
@@ -251,7 +255,7 @@ class FastDecisionTree():
 
         return errs/test_data.shape[0]
 
-    def test_preds(self, root, test_data, test_target):
+    def test_preds(self, root, test_data):
         yhat = np.zeros((test_data.shape[0], 1))
         for i in range(0, test_data.shape[0]):
             yhat[i] = np.argmax(self._dt_value(root, test_data[i, :]))

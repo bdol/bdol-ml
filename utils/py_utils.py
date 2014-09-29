@@ -21,7 +21,13 @@ Copyright Brian Dolhansky 2014
 bdolmail@gmail.com
 """
 
+import sys
+
 def deep_del_from_dict(d, k):
     new_d = dict(d)
     del new_d[k]
     return new_d
+
+def exit_with_err(err_str):
+    print >> sys.stderr, err_str
+    sys.exit(1)

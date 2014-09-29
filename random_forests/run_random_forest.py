@@ -37,7 +37,7 @@ print "Done!"
 np.seterr(all='ignore')
 
 print "Training random forest..."
-rf = RandomForest(20, 10, 3, boot_percent=0.3, feat_percent=0.1, debug=True)
+rf = RandomForest(21, 10, 10, boot_percent=0.3, feat_percent=0.1, debug=False)
 rf.train(train_data, train_target)
 print "Done training!"
 

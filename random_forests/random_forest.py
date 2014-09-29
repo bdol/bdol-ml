@@ -55,10 +55,8 @@ class RandomForest:
     def train(self, train_data, train_target):
         t = 0
         for i in range(self.n_trees):
-            if self.debug:
-                prog_bar(t, self.n_trees)
-                t += 1
-
+            prog_bar(t, self.n_trees)
+            t += 1
 
             keep_idx = np.random.rand(train_data.shape[0]) <= \
                        self.boot_percent
@@ -67,13 +65,13 @@ class RandomForest:
             boot_train_target = train_target[keep_idx]
 
             dt = FastDecisionTree(self.max_depth, self.num_splits,
-                                  feat_subset=self.feat_percent)
+                                  feat_subset=self.feat_percent,
+                                  debug=self.debug)
 
             r = dt.train(boot_train_data, boot_train_target)
             self.roots.append(r)
 
-        if self.debug:
-            prog_bar(self.n_trees, self.n_trees)
+        prog_bar(self.n_trees, self.n_trees)
 
     def test(self, test_data, test_target):
         t = 0
@@ -83,15 +81,12 @@ class RandomForest:
         yhat_forest = np.zeros((test_data.shape[0], self.n_trees))
         for i in range(len(self.roots)):
             r = self.roots[i]
-            if self.debug:
-                prog_bar(t, self.n_trees)
-                t += 1
+            prog_bar(t, self.n_trees)
+            t += 1
 
-            yhat_forest[:, 0:] = dt.test_preds(r, test_data, test_target)
+            yhat_forest[:, i:] = dt.test_preds(r, test_data)
 
-        if self.debug:
-            prog_bar(self.n_trees, self.n_trees)
-            print
+        prog_bar(self.n_trees, self.n_trees)
 
         yhat = stats.mode(yhat_forest, axis=1)[0]
         return yhat
