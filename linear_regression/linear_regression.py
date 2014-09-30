@@ -34,13 +34,13 @@ class LinearRegression:
     def __init__(self):
         self.w = None
 
-    def _regularization(self, w, regularization):
+    def _calc_reg(self, w, regularization, lam):
         if regularization == 'None':
             return 0.0
         elif regularization == 'L1':
-            return np.sum(np.abs(w))
+            return 0.0
         elif regularization == 'L2':
-            return 111
+            return lam*w
         else:
             exit_with_err("Error in LinearRegression: Unsupported "
                           "regularization {0}".format(regularization))
@@ -48,7 +48,7 @@ class LinearRegression:
     """
     Batch gradient descent with a least-squares loss.
     """
-    def _gd(self, train_data, train_target, regularization,
+    def _gd(self, train_data, train_target, regularization, lam,
             step_size=1E-5, num_epochs=1000):
 
         self.w = np.zeros((train_data.shape[1], 1))
@@ -60,8 +60,9 @@ class LinearRegression:
                 prog_bar(t, num_epochs)
 
             yhat = np.dot(train_data, self.w)
-            grad = np.sum((train_target - yhat)*train_data, axis=0)
-            self.w += step_size*grad[:, None]
+            grad = np.sum((yhat - train_target)*train_data, axis=0) - \
+                   self._calc_reg(self.w, regularization, lam)
+            self.w -= step_size*grad[:, None]
 
         prog_bar(num_epochs, num_epochs)
 
@@ -69,8 +70,8 @@ class LinearRegression:
         x = train_data
         self.w = np.linalg.inv(x.T.dot(x)).dot(x.T).dot(train_target)
 
-    def train(self, train_data, train_target, regularization='None'):
-        self._gd(train_data, train_target, regularization)
+    def train(self, train_data, train_target, regularization='None', lam=0.1):
+        self._gd(train_data, train_target, regularization, lam)
 
     def test(self, test_data):
         if self.w == None:
