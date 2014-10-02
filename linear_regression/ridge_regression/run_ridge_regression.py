@@ -22,12 +22,9 @@ bdolmail@gmail.com
 """
 
 import numpy as np
-from data_utils import cross_validation_folds, split_train_test, RMSE
+from data_utils import RMSE
 from linear_regression import LinearRegression
 import matplotlib.pyplot as plt
-from sklearn import preprocessing
-from sklearn.datasets import fetch_california_housing
-import sys
 
 # Here we create simulated data to show the benefit of ridge regression
 # From Tibshirani 2013, "Modern regression 1: Ridge Regression"
