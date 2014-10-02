@@ -50,7 +50,8 @@ test_target = test_target[:, None]
 
 lin_reg = LinearRegression()
 print "Training..."
-lin_reg.train(train_data, train_target)
+# lin_reg.train(train_data, train_target)
+lin_reg.train_closed_form_unregularized(train_data, train_target)
 print
 print "Done!"
 

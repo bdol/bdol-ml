@@ -34,21 +34,21 @@ class LinearRegression:
     def __init__(self):
         self.w = None
 
-    def _calc_reg(self, w, regularization, lam):
-        if regularization == 'None':
-            return 0.0
-        elif regularization == 'L1':
-            return 0.0
-        elif regularization == 'L2':
-            return lam*w
-        else:
-            exit_with_err("Error in LinearRegression: Unsupported "
-                          "regularization {0}".format(regularization))
+    # def _calc_reg(self, w, regularization, lam):
+    #     if regularization == 'None':
+    #         return 0.0
+    #     elif regularization == 'L1':
+    #         return 0.0
+    #     elif regularization == 'L2':
+    #         return lam*w
+    #     else:
+    #         exit_with_err("Error in LinearRegression: Unsupported "
+    #                       "regularization {0}".format(regularization))
 
     """
     Batch gradient descent with a least-squares loss.
     """
-    def _gd(self, train_data, train_target, regularization, lam,
+    def grad_desent_lasso(self, train_data, train_target, regularization, lam,
             step_size=1E-5, num_epochs=1000):
 
         self.w = np.zeros((train_data.shape[1], 1))
@@ -60,18 +60,28 @@ class LinearRegression:
                 prog_bar(t, num_epochs)
 
             yhat = np.dot(train_data, self.w)
-            grad = np.sum((yhat - train_target)*train_data, axis=0) - \
+            print np.sum((yhat - train_target)*train_data, axis=0)[:,
+                  None].shape
+            print self._calc_reg(self.w, regularization, lam).shape
+            grad = np.sum((yhat - train_target)*train_data, axis=0)[:] - \
                    self._calc_reg(self.w, regularization, lam)
-            self.w -= step_size*grad[:, None]
+            self.w -= step_size*grad
 
         prog_bar(num_epochs, num_epochs)
 
-    def _closed_form(self, train_data, train_target):
-        x = train_data
-        self.w = np.linalg.inv(x.T.dot(x)).dot(x.T).dot(train_target)
+    def train_closed_form_unregularized(self, train_data, train_target):
+        A = train_data
+        b = train_target
+        self.w = np.linalg.inv(A.T.dot(A)).dot(A.T.dot(b))
 
-    def train(self, train_data, train_target, regularization='None', lam=0.1):
-        self._gd(train_data, train_target, regularization, lam)
+    def train_closed_form_ridge(self, train_data, train_target, lam):
+        A = train_data
+        b = train_target
+        G = lam*np.eye(A.shape[1])
+        self.w = np.linalg.inv(A.T.dot(A) + G.T.dot(G)).dot(A.T).dot(b)
+
+    # def train(self, train_data, train_target, regularization='None', lam=0.1):
+    #     self._gd(train_data, train_target, regularization, lam)
 
     def test(self, test_data):
         if self.w == None:

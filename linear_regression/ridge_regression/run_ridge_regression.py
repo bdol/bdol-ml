@@ -1,5 +1,5 @@
 """
-Example that uses ridge regression on 
+Example that uses ridge regression on
 
 ==============
 Copyright Info
@@ -22,39 +22,53 @@ bdolmail@gmail.com
 """
 
 import numpy as np
-from data_utils import split_train_test, RMSE
+from data_utils import cross_validation_folds, split_train_test, RMSE
 from linear_regression import LinearRegression
+import matplotlib.pyplot as plt
 from sklearn import preprocessing
 from sklearn.datasets import fetch_california_housing
+import sys
 
+# Here we create simulated data to show the benefit of ridge regression
+# From Tibshirani 2013, "Modern regression 1: Ridge Regression"
+# http://www.stat.cmu.edu/~ryantibs/datamining/lectures/16-modr1.pdf
+#
+# Our model is a linear function of the features, with 10 large features (
+# between 0.5 and 1.0) and 20 smaller ones (between 0.0 and 0.1)
+true_w = 0.3*np.random.rand(20, 1)
+true_w = np.append(true_w, 0.5*np.random.rand(10, 1) + 0.5)
 
-print "Loading data..."
-housing = fetch_california_housing(data_home='/home/bdol/data')
-train_data, test_data, train_target, test_target = split_train_test(
-    housing.data, housing.target
-)
+# Now generate the dataset using the true weights
+N = 50
+train_data = np.random.rand(N, 30)
+train_target = train_data.dot(true_w)[:, None]+np.random.randn(N, 1)
+test_data = np.random.rand(N, 30)
+test_target = test_data.dot(true_w)[:, None]+np.random.randn(N, 1)
 
-# Normalize the data
-train_data = preprocessing.scale(train_data)
-test_data = preprocessing.scale(test_data)
-
-# Append bias feature
-train_data = np.hstack((train_data, np.ones((train_data.shape[0], 1),
-                                            dtype=train_data.dtype)))
-test_data = np.hstack((test_data, np.ones((test_data.shape[0], 1),
-                                          dtype=test_data.dtype)))
-
-train_target = train_target[:, None]
-test_target = test_target[:, None]
+lam_range = np.logspace(-1, 1, 100)
+unreg_results = np.zeros((len(lam_range), 1))
+reg_results = np.zeros((len(lam_range), 1))
 
 lin_reg = LinearRegression()
-print "Training..."
-lin_reg.train(train_data, train_target)
-print
-print "Done!"
+i = 0
+for l in lam_range:
+    lin_reg.train_closed_form_unregularized(train_data, train_target)
+    yhat = lin_reg.test(test_data)
+    unreg_results[i] = RMSE(yhat, test_target)
 
-# Get training error
-train_preds = lin_reg.test(train_data)
-test_preds = lin_reg.test(test_data)
-print "Train error:", RMSE(train_preds, train_target)
-print "Test error:", RMSE(test_preds, test_target)
+    lin_reg.train_closed_form_ridge(train_data, train_target, l)
+    yhat = lin_reg.test(test_data)
+    reg_results[i] = RMSE(yhat, test_target)
+
+    i += 1
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+ax.set_xscale("log")
+ax.plot(lam_range, unreg_results, label="Linear Regression")
+ax.plot(lam_range, reg_results, 'r', label="Ridge Regression")
+ax.set_title("Unregularized vs. Ridge Regression, RMSE")
+ax.set_xlabel("Lambda")
+ax.legend()
+
+plt.show()
