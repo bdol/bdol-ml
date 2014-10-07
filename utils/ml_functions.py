@@ -31,9 +31,13 @@ in the decision tree module where dividing by 0 could happen.
 """
 def safe_plogp(x):
     e = x * np.log2(x)
-    # Set values outside the range of log to 0
-    e[np.isinf(e)] = 0
-    e[np.isnan(e)] = 0
+    if hasattr(e, "__len__"):
+        e[np.isinf(e)] = 0
+        e[np.isnan(e)] = 0
+    else:
+        if np.isnan(e) or np.isinf(e):
+            e = 0.0
+
     return e
 
 """
@@ -41,4 +45,22 @@ The standard entropy function, using the "safe" plogp function which clamps
 invalid inputs to 0.
 """
 def safe_entropy(x):
-    return -np.sum(safe_plogp(x), axis=0)
+    return -np.sum(safe_plogp(x))
+
+def marginal_entropy(x):
+    return -np.sum(x * np.log2(x))
+
+def safe_binary_entropy(x):
+    l_px = np.log2(x)
+    l_pnotx = np.log2(1-x)
+    if hasattr(x, "__len__"):
+        l_px[np.isinf(l_px)] = 0
+        l_pnotx[np.isinf(l_pnotx)] = 0
+    else:
+        if np.isnan(l_px) or np.isinf(l_px):
+            l_px = 0
+        if np.isnan(l_pnotx) or np.isinf(l_pnotx):
+            l_pnotx = 0
+
+    return -(np.multiply(x, l_px)
+              + np.multiply((1-x), l_pnotx))
