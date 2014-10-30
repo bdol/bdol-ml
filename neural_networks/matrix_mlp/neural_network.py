@@ -42,12 +42,19 @@ class Layer:
         self.is_input = is_input
         self.is_output = is_output
 
+        # Z is the matrix that holds output values
         self.Z = np.zeros((minibatch_size, size[0]))
+        # The activation function is an externally defined function (with a
+        # derivative) that is stored here
         self.activation = activation
 
+        # W is the outgoing weight matrix for this layer
         self.W = None
+        # S is the matrix that holds the inputs to this layer
         self.S = None
+        # D is the matrix that holds the deltas for this layer
         self.D = None
+        # Fp is the matrix that holds the derivatives of the activation function
         self.Fp = None
 
         if not is_input:
@@ -71,6 +78,7 @@ class Layer:
         if self.is_output:
             return self.Z
         else:
+            # For hidden layers, we add the bias values here
             self.Z = np.append(self.Z, np.ones((self.Z.shape[0], 1)), axis=1)
             self.Fp = self.activation(self.S, deriv=True).T
             return self.Z.dot(self.W)
@@ -112,6 +120,7 @@ class MLP:
         print "Done!"
 
     def forward_propagate(self, data):
+        # We need to be sure to add bias values to the input
         self.layers[0].Z = np.append(data, np.ones((data.shape[0], 1)), axis=1)
 
         for i in range(self.num_layers-1):
@@ -121,7 +130,9 @@ class MLP:
     def backpropagate(self, yhat, labels):
         self.layers[-1].D = (yhat - labels).T
         for i in range(self.num_layers-2, 0, -1):
+            # We do not calculate deltas for the bias values
             W_nobias = self.layers[i].W[0:-1, :]
+
             self.layers[i].D = W_nobias.dot(self.layers[i+1].D) * \
                                self.layers[i].Fp
 
@@ -166,6 +177,3 @@ class MLP:
                                                        float(errs)/N_test)
 
             print out_str
-
-
-
