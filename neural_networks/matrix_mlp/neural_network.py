@@ -71,6 +71,7 @@ class Layer:
         if self.is_output:
             return self.Z
         else:
+            self.Z = np.append(self.Z, np.ones((self.Z.shape[0], 1)), axis=1)
             self.Fp = self.activation(self.S, deriv=True).T
             return self.Z.dot(self.W)
 
@@ -88,7 +89,7 @@ class MLP:
                 )
                 # Here, we add an additional unit at the input for the bias
                 # weight.
-                self.layers.append(Layer([layer_config[i], layer_config[i+1]],
+                self.layers.append(Layer([layer_config[i]+1, layer_config[i+1]],
                                          minibatch_size,
                                          is_input=True))
             else:
@@ -97,7 +98,7 @@ class MLP:
                 )
                 # Here we add an additional unit in the hidden layers for the
                 # bias weight.
-                self.layers.append(Layer([layer_config[i], layer_config[i+1]],
+                self.layers.append(Layer([layer_config[i]+1, layer_config[i+1]],
                                          minibatch_size,
                                          activation=f_sigmoid))
 
@@ -111,7 +112,7 @@ class MLP:
         print "Done!"
 
     def forward_propagate(self, data):
-        self.layers[0].Z = data
+        self.layers[0].Z = np.append(data, np.ones((data.shape[0], 1)), axis=1)
 
         for i in range(self.num_layers-1):
             self.layers[i+1].S = self.layers[i].forward_propagate()
@@ -120,7 +121,8 @@ class MLP:
     def backpropagate(self, yhat, labels):
         self.layers[-1].D = (yhat - labels).T
         for i in range(self.num_layers-2, 0, -1):
-            self.layers[i].D = self.layers[i].W.dot(self.layers[i+1].D) * \
+            W_nobias = self.layers[i].W[0:-1, :]
+            self.layers[i].D = W_nobias.dot(self.layers[i+1].D) * \
                                self.layers[i].Fp
 
     def update_weights(self, eta):
