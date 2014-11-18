@@ -67,9 +67,6 @@ class Layer:
         if not is_input and not is_output:
             self.Fp = np.zeros((size[0], minibatch_size))
 
-    def randomize_weights(self):
-        self.W = np.random.normal(scale=1E-4, size=self.W.shape)
-
     def forward_propagate(self):
         if self.is_input:
             return self.Z.dot(self.W)
