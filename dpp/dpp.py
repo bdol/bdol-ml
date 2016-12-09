@@ -117,7 +117,8 @@ def sample_k(k, lam, V_full):
 
     # QR decomposition, which is more numerically stable (and faster) than Gram
     # Schmidt
-    V, r = np.linalg.qr(V)
+    if i > 0:
+      V, r = np.linalg.qr(V)
 
   return Y
 
